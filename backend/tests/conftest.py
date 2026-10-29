@@ -10,6 +10,17 @@ from app.main import app
 
 TEST_DB_URL = settings.database_url.rsplit("/", 1)[0] + "/clinic_test"
 
+# Same guard as the Alembic migration: no overlapping non-cancelled bookings.
+OVERLAP_GUARD_SQL = """
+ALTER TABLE appointments
+ADD CONSTRAINT no_overlapping_appointments
+EXCLUDE USING gist (
+    doctor_id WITH =,
+    tstzrange(starts_at, ends_at) WITH &&
+)
+WHERE (status <> 'cancelled')
+"""
+
 
 @pytest.fixture(scope="session")
 def engine():
@@ -25,6 +36,9 @@ def engine():
     eng = create_engine(TEST_DB_URL)
     Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
+    with eng.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS btree_gist"))
+        conn.execute(text(OVERLAP_GUARD_SQL))
     yield eng
     eng.dispose()
 

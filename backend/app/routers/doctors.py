@@ -1,22 +1,13 @@
-from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.config import settings
 from app.db import get_db
 from app.deps import get_current_user, require_role
-from app.models import (
-    Appointment,
-    AppointmentStatus,
-    AvailabilityRule,
-    Doctor,
-    Role,
-    TimeOff,
-    User,
-)
+from app.models import AvailabilityRule, Doctor, Role, TimeOff, User
+from app.scheduling import get_open_slots
 from app.schemas import (
     AvailabilityRuleOut,
     AvailabilitySet,
@@ -25,11 +16,9 @@ from app.schemas import (
     TimeOffCreate,
     TimeOffOut,
 )
-from app.slots import Interval, Window, generate_slots
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
 
-CLINIC_TZ = ZoneInfo(settings.clinic_timezone)
 MAX_RANGE_DAYS = 31
 
 
@@ -77,48 +66,11 @@ def get_slots(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"Range too large (max {MAX_RANGE_DAYS} days)"
         )
-
     doctor = db.get(Doctor, doctor_id)
     if doctor is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Doctor not found")
 
-    range_start = datetime.combine(date_from, time.min, tzinfo=CLINIC_TZ).astimezone(
-        timezone.utc
-    )
-    range_end = datetime.combine(
-        date_to + timedelta(days=1), time.min, tzinfo=CLINIC_TZ
-    ).astimezone(timezone.utc)
-
-    rules = db.scalars(
-        select(AvailabilityRule).where(AvailabilityRule.doctor_id == doctor_id)
-    ).all()
-    time_off = db.scalars(
-        select(TimeOff).where(
-            TimeOff.doctor_id == doctor_id,
-            TimeOff.starts_at < range_end,
-            TimeOff.ends_at > range_start,
-        )
-    ).all()
-    booked = db.scalars(
-        select(Appointment).where(
-            Appointment.doctor_id == doctor_id,
-            Appointment.status != AppointmentStatus.CANCELLED,
-            Appointment.starts_at < range_end,
-            Appointment.ends_at > range_start,
-        )
-    ).all()
-
-    blocked = [Interval(t.starts_at, t.ends_at) for t in time_off] + [
-        Interval(a.starts_at, a.ends_at) for a in booked
-    ]
-    slots = generate_slots(
-        windows=[Window(r.weekday, r.start_time, r.end_time) for r in rules],
-        blocked=blocked,
-        slot_minutes=doctor.slot_minutes,
-        start_date=date_from,
-        end_date=date_to,
-        tz=CLINIC_TZ,
-    )
+    slots = get_open_slots(db, doctor, date_from, date_to)
     return [SlotOut(starts_at=s.start, ends_at=s.end) for s in slots]
 
 

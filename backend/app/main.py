@@ -4,7 +4,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.routers import admin, auth, doctors
+from app.routers import admin, appointments, auth, doctors
 
 app = FastAPI(title="Clinic Scheduler")
 
@@ -18,6 +18,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(doctors.router)
+app.include_router(appointments.router)
 
 
 @app.get("/health")

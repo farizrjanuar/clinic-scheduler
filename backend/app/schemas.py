@@ -9,7 +9,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.models import Role
+from app.models import AppointmentStatus, Role
 
 
 class UserCreate(BaseModel):
@@ -111,3 +111,28 @@ class TimeOffOut(BaseModel):
 class SlotOut(BaseModel):
     starts_at: datetime
     ends_at: datetime
+
+
+class AppointmentCreate(BaseModel):
+    doctor_id: int
+    starts_at: AwareDatetime
+    patient_id: int | None = None  # only used when an admin books for a patient
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class AppointmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    doctor_id: int
+    patient_id: int
+    starts_at: datetime
+    ends_at: datetime
+    status: AppointmentStatus
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StatusUpdate(BaseModel):
+    status: AppointmentStatus
