@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     secret_key: str  # required: set SECRET_KEY in .env
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    clinic_timezone: str = "Asia/Jakarta"
 
     model_config = SettingsConfigDict(env_file=".env")
 
